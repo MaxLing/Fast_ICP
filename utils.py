@@ -5,7 +5,7 @@ def pc_normals(p, k=4):
     '''
     :param p: point cloud m*3
     :param k: Knn
-    :return: normals with ambiguous orientaion (PCA problem)
+    :return: normals with ambiguous orientaion (PCA solution problem)
     '''
     knn = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(p)
     _, index = knn.kneighbors(p)
@@ -44,16 +44,17 @@ def normal_sampling(normals, nums):
     return sample_index
 
 
-def icp(p, q, method, sample, normals = None):
+def icp(p, q, error, sample, normals = None):
     '''
     :param p: start point cloud m*3
     :param q: destination point cloud m*3
-    :param method: 'point2point' or 'point2plane'
-    :param sample: 'all', 'random', 'normal_space'
+    :param normals: normals of q, call pc_normals() to obtain before this function
+    :param error: 'point2point', 'point2plane'
+    :param sample: 'random', 'normal_space'
     :return: current estimate of R and T, q = R*p + T
     '''
     if normals is None:
-        assert method!='point2plane'
+        assert error!='point2plane'
 
     # selection
     m = p.shape[0]
@@ -75,7 +76,7 @@ def icp(p, q, method, sample, normals = None):
     q = q[index.reshape(-1)]
 
 
-    if method == 'point2point':
+    if error == 'point2point':
         p_mean = np.mean(p,axis=0)
         q_mean = np.mean(q,axis=0)
 
@@ -89,7 +90,7 @@ def icp(p, q, method, sample, normals = None):
         T = q_mean.reshape((-1,1)) - np.dot(R, p_mean.reshape((-1,1)))
         return R, T
 
-    elif method == 'point2plane':
+    elif error == 'point2plane':
         normals = normals[index.reshape(-1)]
 
         b = np.sum(normals*(q-p), axis = 1)
