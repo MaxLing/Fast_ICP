@@ -44,29 +44,32 @@ def normal_sampling(normals, nums):
     return sample_index
 
 
-def icp(p, q, error, sample, normals = None):
+def icp(p, q, error, sample, reject = None, normals = None):
     '''
     :param p: start point cloud m*3
     :param q: destination point cloud m*3
     :param normals: normals of q, call pc_normals() to obtain before this function
     :param error: 'point2point', 'point2plane'
     :param sample: 'random', 'normal_space'
+    :param reject: 'normal_incompatible'
     :return: current estimate of R and T, q = R*p + T
     '''
     if normals is None:
         assert error!='point2plane'
+        assert reject!='normal_incompatible'
 
     # selection
     m = p.shape[0]
-    r = 0.2
+    r = 0.2 # sample ratio
     if sample == 'random':
-        index = np.random.choice(range(m), size=int(m*r), replace=False)
-        p = p[index]
+        p_index = np.random.choice(range(m), size=int(m*r), replace=False)
+        p = p[p_index]
     elif sample == 'normal_space':
         p_nums = int(m*r)
         p_normals = pc_normals(p)
-        index = normal_sampling(p_normals, p_nums)
-        p = p[index]
+        p_index = normal_sampling(p_normals, p_nums)
+        p = p[p_index]
+        p_normals = p_normals[p_index]
     else: # 'all'
         pass
 
@@ -74,8 +77,17 @@ def icp(p, q, error, sample, normals = None):
     knn = NearestNeighbors(n_neighbors=1, algorithm='kd_tree').fit(q)
     dist, index = knn.kneighbors(p)
     q = q[index.reshape(-1)]
+    normals = normals[index.reshape(-1)]
 
+    # rejection
+    if reject == 'normal_incompatible':
+        angles = np.arccos(np.einsum('ij,ij->i', p_normals, normals) / np.linalg.norm(p_normals, axis=1)*np.linalg.norm(normals, axis=1))
+        compatible = angles<=np.pi/4
+        p = p[compatible]
+        q = q[compatible]
+        normals = normals[compatible]
 
+    # error minimization
     if error == 'point2point':
         p_mean = np.mean(p,axis=0)
         q_mean = np.mean(q,axis=0)
@@ -91,8 +103,6 @@ def icp(p, q, error, sample, normals = None):
         return R, T
 
     elif error == 'point2plane':
-        normals = normals[index.reshape(-1)]
-
         b = np.sum(normals*(q-p), axis = 1)
         # A = np.block([[(normals[:, 2] * p[:, 1] - normals[:, 1] * p[:, 2]).reshape((-1,1)),
         #                (normals[:, 0] * p[:, 2] - normals[:, 2] * p[:, 0]).reshape((-1,1)),
