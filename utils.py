@@ -82,7 +82,7 @@ def icp(p, q, error, sample, reject = None, normals = None):
     # rejection
     if reject == 'normal_incompatible':
         angles = np.arccos(np.einsum('ij,ij->i', p_normals, normals) / np.linalg.norm(p_normals, axis=1)*np.linalg.norm(normals, axis=1))
-        compatible = angles<=np.pi/4
+        compatible = np.bitwise_or(angles <= np.pi/4, angles >= 3*np.pi/4) # due to ambiguous orientaion
         p = p[compatible]
         q = q[compatible]
         normals = normals[compatible]
